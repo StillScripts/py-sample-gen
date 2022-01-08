@@ -12,23 +12,37 @@ from faker import Faker
 fake = Faker()
 
 
-def swap_quotes():
-    stringA = input(": ")
+''' Convert the ` character to the " character in a string '''
+def swap_quotes(original):
     reset = ""
-    for i in stringA: 
+    for i in original: 
         if i == "`":
             reset += '"'
         else: 
             reset += i
     print(reset)
 
-def int_gen(length):
-    rand_int = random.randint(1, 10**length)
+''' Generate a random integer within a range '''
+def int_gen(limit):
+    rand_int = random.randint(1, 10**limit)
     return rand_int
 
+''' Generate a random decimal to a certain number of digits '''
 def dec_gen(digits):
     rand_dec = random.random() * 50
     return round(rand_dec, digits)
+
+''' 
+  Generate data for an INSERT INTO query.
+  Filename is the Table name. 
+  Schema is the attributes key names and data types. 
+  Limit is the amount of rows to generate.
+'''
+def generate_sample_data(filename, schema, limit):
+    index = 0 # Track index value
+    data_array = [] # Store data
+    while index < limit:
+        print("hey")
     
 def sample_generation(filename, schema, length):
     start = 0
@@ -115,7 +129,26 @@ def sample_generation(filename, schema, length):
         f.write(str(result))
 
             
-    
+
+# All the possible data types to use for generation
+class TypesZ(Enum):
+    #UUID = 0
+    INT_INCREMENT = 0 # An AUTO_INCREMENT ID
+    INT_FOREIGN_KEY = 1 # A FOREIGN_KEY referencing an AUTO_INCREMENT ID
+    BOOLEAN = 2 # TRUE/FALSE
+    INT = 3 # INT within a value range
+    DECIMAL = 4 # DECIMAL within a value range
+    VARCHAR = 5 # Random string of text within a text length range
+    TEXT = 6 # Random string of text within a text length range
+    WILDCARD = 7 # Ordered set of values to use
+    WILDCARD_RANDOM = 8 # Random list of values to use
+    FIRST_NAME = 9 # Random first name
+    LAST_NAME = 10 # Random last name
+    ADDRESS = 11 # Random street address
+    CITY = 12 # Random town
+    PHONE = 13 # Random phone number
+    EMAIL = 14 # Random email address
+
 class Types(Enum):
     FOREIGN_KEY = 0
     BOOLEAN = 1
@@ -140,6 +173,97 @@ class Types(Enum):
     WILDCARD_RANDOM = 20
     DECIMAL = 21
     
+    
+class Attribute: 
+    def __init__(self, data_type: int, null_status: bool, limit: int, wildcard_values: list):
+        self.data_type = data_type
+        self.null_status = null_status
+        self.limit = limit
+        self.wildcard_values
+        
+
+hey = """CREATE TABLE IF NOT EXISTS COURSE (
+	`CourseCode` INT(8) NOT NULL AUTO_INCREMENT,
+	`CourseName` VARCHAR(50) NOT NULL,
+	`CreditPoints` INT(3) NOT NULL,
+	`Notes` TEXT DEFAULT NULL,
+	PRIMARY KEY (`CourseCode`)
+)"""
+    
+def num_input(question):
+    val = 0
+    num_chosen = False
+    while not num_chosen:
+        user_num = input(question)
+        try:
+            val = int(user_num)
+            num_chosen = True
+        except ValueError:
+            print("Input is not a number, you must choose a number.")
+    print(val)
+    return val
+            
+# Parse the query text to determine the value
+def get_initial_type(line):
+    if "INT" in line.upper():
+        return TypesZ.INT
+    
+
+# Allow user to make field wildcard and set its values
+def let_field_be_wild(key, current_type):
+    new_type = current_type
+    values = []
+    initial_check = input("Would you like to make {} a wildcard? (y/N)  ".format(key))
+    if (len(initial_check) > 0 and initial_check[0].lower() == "y"):
+        #continue
+        random_check = input("Will this be an ordered or random wildcard? (o/R")
+        if (len(random_check) > 0 and random_check.lower() == "o"):
+            new_type = TypesZ.WILDCARD
+        else: 
+            new_type = TypesZ.WILDCARD_RANDOM
+        amount = num_input("How many wildcard values would you like to add?  ")
+        for i in range(amount):
+            value = input("Enter wildcard value {}:  ".format(i))
+            values.append(value)
+        return (new_type, values) # Wilcard type with special values     
+    else:
+        return (current_type, []) # Non-wildcard
+    
+def sql_into_schema(query_body):
+    schema = {} # Store the schema here
+    lines = query_body.split(",") # Create list of query lines
+    for line in lines: # Iterate through lines
+        key = "" # Store the attribute key
+        get_key = False # Handle whether to record key
+        for char in line: # Iterate through characters in the query to get key
+            if get_key:
+                key += char
+            if char == "`":
+                get_key = not get_key
+        null_status = True
+        if ("NOT NULL" in line.upper()):
+            null_status = False
+        if ("AUTO_INCREMENT" in line.upper()):
+            schema[key] = Attribute(TypesZ.INT_INCREMENT, null_status, 0, [])
+        else: 
+        # Get limits and wildcard values
+            
+            data_type, wildcard_values = let_field_be_wild(key, TypesZ.INT)
+            limit = 100
+            schema[key] = Attribute(data_type, null_status, limit, wildcard_values)
+    print(schema)
+
+            
+            
+            
+        
+    
+    
+# ass is a schema for the ass table
+ass = {
+       "Ass": Attribute(Types.INT_INCREMENT, True, 100, []),
+       "Butt": Attribute(Types.INT_INCREMENT, False, 100, [])
+}
 
 assessment = {
     "AssessmentID": [Types.INT_INCREMENT, False],
@@ -204,9 +328,9 @@ student_assessment = {
     "StudentID": [Types.FOREIGN_KEY, False, 89],
     "DateSubmitted": [Types.DATE, False],
     "DaysExtension": [Types.INT, True, 1],
-    "MarksAwarded": [Types.DECIMAL, True, 2] 
+    "MarksAwarded": [Types.DECIMAL, False, 2] 
 }
-#sample_generation("student-assessment", student_assessment, 200) 
+sample_generation("student-assessment", student_assessment, 150) 
 
 teacher = {
     "StaffID": [Types.INT_INCREMENT, False],
