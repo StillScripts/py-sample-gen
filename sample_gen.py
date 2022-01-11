@@ -1,36 +1,189 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Nov 27 13:52:54 2021
+Created on Sun Jan  9 07:56:38 2022
 
-@author: @StillScripts
+@author: StillScripts
 """
 
+''' Imports '''
 from enum import Enum
 import random
-import string
 from faker import Faker
+from datetime import datetime
 fake = Faker()
 
+''' CLASSES AND FUNCTIONS '''
 
-''' Convert the ` character to the " character in a string '''
-def swap_quotes(original):
-    reset = ""
-    for i in original: 
-        if i == "`":
-            reset += '"'
-        else: 
-            reset += i
-    print(reset)
+''' Blueprint for possible choices when running the program '''
+class Actions(Enum):
+    GET_ATTRIBUTES = 0
+    GENERATE_SAMPLE_DATA = 1
 
-''' Generate a random integer within a range '''
-def int_gen(limit):
-    rand_int = random.randint(1, 10**limit)
+''' Blueprint for running all the possible special functions '''
+class Magic(Enum):
+    DEFAULT = 0
+    RACE_TIMES = 1 # Used for generating race times
+    GET_DAY = 2 # Used for generating race day
+    PROCESS_TEAM_MEMBERS = 3 # Used for saving the ids of specific members
+
+
+''' Blueprint for the possible data types to use '''
+class Types(Enum):
+    INT_INCREMENT = 0 # An AUTO_INCREMENT ID
+    INT_FOREIGN_KEY = 1 # A FOREIGN_KEY referencing an AUTO_INCREMENT ID
+    INT = 2 # INT within a value range
+    DECIMAL = 3 # DECIMAL within a value range
+    BOOLEAN = 4 # TRUE/FALSE
+    VARCHAR = 5 # Random string of text within a text length range
+    TEXT = 6 # Random string of text within a text length range
+    FIRST_NAME = 7 # Random first name
+    LAST_NAME = 8 # Random last name
+    COUNTRY = 9 # Random country
+    ADDRESS = 10 # Random street address
+    CITY = 11 # Random town
+    STATE = 12 # Random statecode
+    PHONE = 13 # Random phone number
+    EMAIL = 14 # Random email address
+    DATE = 15 # Random date
+    SINGLE = 16 # Single value
+    WILDCARD = 17 # Ordered set of values to use
+    WILDCARD_RANDOM = 18 # Random list of values to use
+    CODE_ID = 19 # Wildcard + index number
+    MAGIC = 20 # Pass in a custom function which uses the index to do something 
+
+    
+''' Fields for an attribute in a table '''
+class Attribute: 
+    def __init__(self, data_type, null_status, limit=1, wildcard_values=[]):
+        self.data_type = data_type
+        self.null_status = null_status
+        self.limit = limit
+        self.wildcard_values = wildcard_values
+
+ 
+''' 
+    Save time by converting CREATE TABLE body into a
+    default schema using the Attributes class 
+'''
+def create_attributes(table_name):
+    schema = {} # Store the schema in this dictionary
+    query_body = input("Paste your existing CREATE TABLE body: ")
+    lines = query_body.split(",") # Create list of query lines
+    for line in lines: # Iterate through lines
+        key = "" # Store the attribute key
+        value = "Attribute(Types" # Store the value as a string
+        limit = "" # Store the attribute number
+        get_key = False # Handle whether to record key
+        for char in line: # Iterate through characters in the query to get key
+            if get_key and char != "`":
+                key += char
+            if char == "`":
+                get_key = not get_key
+            if char.isdigit():
+                limit += char
+                null_status = True
+        if ("AUTO_INCREMENT" in line.upper()):
+            value += ".INT_INCREMENT"
+        if ("NOT NULL" in line.upper()):
+            null_status = False
+        value += ", {}, {}, [])".format(str(null_status), limit)
+        schema[key] = value
+    print(table_name + " = {")
+    for key in schema.keys():
+        if len(key) > 0:
+            print("    '{}': {},".format(key, schema[key]))
+    print("}")
+    
+
+''' Generate a random int with a certain number of digits'''
+def int_gen(digits):
+    rand_int = random.randint(1*digits, 10**digits)
     return rand_int
 
-''' Generate a random decimal to a certain number of digits '''
-def dec_gen(digits):
-    rand_dec = random.random() * 50
-    return round(rand_dec, digits)
+
+''' Generate a random decimal with a certain number of digits and decimals '''
+def dec_gen(limit, digits):
+    rand_dec = random.random() * 10**digits
+    return round(rand_dec, limit)
+
+
+''' Handle magic functions  '''
+def handle_magic(index=0, magic=Magic.DEFAULT, data_list=[]):
+    if magic == Magic.RACE_TIMES:
+        return create_time(index)
+    elif magic == Magic.GET_DAY:
+        return create_day(index)
+    elif magic == Magic.PROCESS_TEAM_MEMBERS:
+        return process_team_members(data_list)
+    else:
+        return data_list
+
+''' Use the attributes of the column to generate sample value '''
+def generate_value_for_column(column, index):
+    value = "DEFAULT" # Default value
+    if column.null_status and random.random() > 0.8:
+        value = "EMPTY_PLACEHOLDER_VALUE" # Random NULL Value (20% likelihood)
+    else:
+        dt = column.data_type # The data type
+        if dt == Types.INT_INCREMENT:
+            value = index + 1 # increment by 1
+        elif dt == Types.INT_FOREIGN_KEY:
+            value = random.randint(1, column.limit)
+        elif dt == Types.INT:
+            value = int_gen(column.limit) # random int
+        elif dt == Types.DECIMAL:
+            value = dec_gen(2, column.limit) # random decimal
+        elif dt == Types.BOOLEAN:
+            value = random.random() < 0.5  # randomly True/False
+        elif dt == Types.VARCHAR:
+            value = fake.text(max_nb_chars=column.limit) # text within VARCHAR limit
+        elif dt == Types.TEXT:
+            value = fake.text(max_nb_chars=500) # 500 characters of text
+        elif dt == Types.FIRST_NAME:
+            value = fake.name().split(" ")[0] # realistic first name
+        elif dt == Types.LAST_NAME:
+            value = fake.name().split(" ")[1] # realistic last name
+        elif dt == Types.ADDRESS:
+            value = fake.street_address() # realistic street address
+        elif dt == Types.CITY:
+            value = fake.city() # realistic city
+        elif dt == Types.STATE:
+            value = fake.country_code() # realistic state code
+        elif dt == Types.PHONE:
+            value = "(02) "+ "{}".format(int_gen(8)) # realistic phone number
+        elif dt == Types.EMAIL:
+            value = fake.free_email() # realistic email
+        elif dt == Types.DATE:
+            value = fake.date_between_dates(
+                date_start=datetime(2021,1,1), 
+                date_end=datetime(2021,12,31)) # date within range
+        elif dt == Types.SINGLE:
+            value = column.wildcard_values[0] # use the single wildcard value
+        elif dt == Types.WILDCARD:
+            value = column.wildcard_values[index] # use each wildcard value in order
+        elif dt == Types.WILDCARD_RANDOM:
+            index_num = random.randint(1, len(column.wildcard_values)) # randomly use wildcard values
+            value = column.wildcard_values[index_num-1]  
+        elif dt == Types.CODE_ID:
+            value = "{}-{}".format(column.wildcard_values[0], index+1)
+        elif dt == Types.MAGIC:
+            value = handle_magic(index, column.wildcard_values)   
+    return value
+
+
+''' Write the sample INSERT INTO query to a file '''
+def create_query_file(table_name, table_keys, sample_data):
+    # Convert '"'  and "'" into '`'
+    table_keys = str(table_keys).replace('"', '`').replace("'", "`")  
+    # Create the INSERT INTO statement as a string
+    statement = "INSERT INTO `{}` {} \n VALUES \n {}".format(table_name, table_keys, sample_data)
+    # Remove "[" and "]" characters
+    statement = statement.replace("[", "").replace("]", "")
+    # Convert the EMPTY_PLACEHOLDER_VALUE to NULL for SQL
+    statement = statement.replace("'EMPTY_PLACEHOLDER_VALUE'", "NULL")
+    with open('{}.txt'.format(table_name), 'w') as f:
+        f.write(statement)
+
 
 ''' 
   Generate data for an INSERT INTO query.
@@ -38,349 +191,236 @@ def dec_gen(digits):
   Schema is the attributes key names and data types. 
   Limit is the amount of rows to generate.
 '''
-def generate_sample_data(filename, schema, limit):
-    index = 0 # Track index value
-    data_array = [] # Store data
+def generate_sample_data(table_name, schema, limit, apply_process=False, magic=Magic.DEFAULT):
+    index = 0 # Track index value of row
+    data_list = [] # Store all sample data for table
+    # Create as many values as the set limit
     while index < limit:
-        print("hey")
-    
-def sample_generation(filename, schema, length):
-    start = 0
-    data_array = []
-    while start < length:
-        keys = schema.keys()
-        row = {}
-        rand_num = random.random()
-        for i in keys:
-            value = 'DEFAULT'
-            if schema[i][1] and rand_num>0.75:
-                value = None
-            else:
-                if schema[i][0] == Types.FOREIGN_KEY:
-                    value = random.randint(1, schema[i][2])
-                elif schema[i][0] == Types.BOOLEAN:
-                    if rand_num>0.5:
-                        value = True
-                    else:
-                        value = False
-                elif schema[i][0] == Types.INT:
-                    value = int_gen(schema[i][2])
-                elif schema[i][0] == Types.DECIMAL:
-                    value = dec_gen(schema[i][2])
-                elif schema[i][0] == Types.VARCHAR:
-                    value = fake.text(max_nb_chars=schema[i][2])
-                elif schema[i][0] == Types.TEXT:
-                    value = fake.text(max_nb_chars=schema[i][2])
-                elif schema[i][0] == Types.DATE:
-                    value = fake.date()
-                elif schema[i][0] == Types.FIRST_NAME:
-                    value = fake.name().split(" ")[0]
-                elif schema[i][0] == Types.LAST_NAME:
-                    value = fake.name().split(" ")[1]
-                elif schema[i][0] == Types.INT_INCREMENT:
-                    value = start + 1
-                elif schema[i][0] == Types.ADDRESS:
-                    value = fake.street_address()
-                elif schema[i][0] == Types.CITY:
-                    value = fake.city()
-                elif schema[i][0] == Types.STATE:
-                    if rand_num < 0.5:
-                        value = "QLD"
-                    else:
-                        value = "NSW"
-                elif schema[i][0] == Types.POSTCODE:
-                    if rand_num < 0.5:
-                        value = 4000 + int_gen(3)
-                    else:
-                        value = 2000 + int_gen(3)
-                elif schema[i][0] == Types.PHONE:
-                    value = "(02) "+ "{}".format(int_gen(8))
-                elif schema[i][0] == Types.EMAIL:
-                    value = fake.free_email()
-                elif schema[i][0] == Types.CREDIT:
-                    if rand_num < 0.33:
-                        value = 192
-                    elif 0.33 < rand_num < 0.66:
-                        value = 288
-                    else:
-                        value = 192
-                elif schema[i][0] == Types.ROOM_CODE:
-                    building = row["Building"]
-                    floor = row["Floor"]
-                    value = "{}-{}-{}".format(building, floor, random.randint(1, 20))
-                elif schema[i][0] == Types.FUNCTION:
-                    value = "It is used for {}".format(fake.text(max_nb_chars=80))
-                elif schema[i][0] == Types.UNIT_CODE:
-                    text = ''.join(random.choice(string.ascii_uppercase) for i in range(3))
-                    num = ''.join(random.choice(string.digits) for i in range(4))
-                    value = "{}{}".format(text, num)                    
-                elif schema[i][0] == Types.WILDCARD:
-                    value = schema[i][2][start]
-                elif schema[i][0] == Types.WILDCARD_RANDOM:
-                    index_num = random.randint(1, len(schema[i][2]))
-                    value = schema[i][2][index_num-1]
-            row[i] = value
-        data_array.append(row)
-        start += 1
-    result = [tuple(row.values()) for row in data_array]
-    print(filename)
-    print(str(result))
-    with open('{}.txt'.format(filename), 'w') as f:
-        f.write(str(result))
+        keys = schema.keys() # Access the keys of the schema
+        row = {} # Store the current row data
+        row_index = 0
+        for key in keys:
+            # Use function to generate the appropriate value
+            value = generate_value_for_column(schema[key], index)
+            row[key] = value # Add value to row
+            row_index += 1
+        data_list.append(row) # Add row to table
+        index += 1 # Go to next row
+    if apply_process:
+        # Call the method used to apply a special process
+        data_list = handle_magic(0, magic, data_list)
+    # Convert the table keys and sample data into tuple
+    table_keys = [tuple(schema.keys())]
+    sample_data = [tuple(row.values()) for row in data_list] 
 
-            
 
-# All the possible data types to use for generation
-class TypesZ(Enum):
-    #UUID = 0
-    INT_INCREMENT = 0 # An AUTO_INCREMENT ID
-    INT_FOREIGN_KEY = 1 # A FOREIGN_KEY referencing an AUTO_INCREMENT ID
-    BOOLEAN = 2 # TRUE/FALSE
-    INT = 3 # INT within a value range
-    DECIMAL = 4 # DECIMAL within a value range
-    VARCHAR = 5 # Random string of text within a text length range
-    TEXT = 6 # Random string of text within a text length range
-    WILDCARD = 7 # Ordered set of values to use
-    WILDCARD_RANDOM = 8 # Random list of values to use
-    FIRST_NAME = 9 # Random first name
-    LAST_NAME = 10 # Random last name
-    ADDRESS = 11 # Random street address
-    CITY = 12 # Random town
-    PHONE = 13 # Random phone number
-    EMAIL = 14 # Random email address
-
-class Types(Enum):
-    FOREIGN_KEY = 0
-    BOOLEAN = 1
-    INT = 2
-    VARCHAR = 3
-    TEXT = 4
-    DATE = 5
-    FIRST_NAME = 6
-    LAST_NAME = 7
-    INT_INCREMENT = 8
-    ADDRESS = 9
-    CITY = 10
-    STATE = 11
-    POSTCODE = 12
-    PHONE = 13
-    EMAIL = 14
-    CREDIT = 15
-    ROOM_CODE = 16
-    FUNCTION = 17
-    UNIT_CODE = 18
-    WILDCARD = 19
-    WILDCARD_RANDOM = 20
-    DECIMAL = 21
+    print(table_name) # Display table name
+    print(table_keys) # Display table keys
+    print(str(sample_data)) # Display the tuple data
     
-    
-class Attribute: 
-    def __init__(self, data_type: int, null_status: bool, limit: int, wildcard_values: list):
-        self.data_type = data_type
-        self.null_status = null_status
-        self.limit = limit
-        self.wildcard_values
-        
-
-hey = """CREATE TABLE IF NOT EXISTS COURSE (
-	`CourseCode` INT(8) NOT NULL AUTO_INCREMENT,
-	`CourseName` VARCHAR(50) NOT NULL,
-	`CreditPoints` INT(3) NOT NULL,
-	`Notes` TEXT DEFAULT NULL,
-	PRIMARY KEY (`CourseCode`)
-)"""
-    
-def num_input(question):
-    val = 0
-    num_chosen = False
-    while not num_chosen:
-        user_num = input(question)
-        try:
-            val = int(user_num)
-            num_chosen = True
-        except ValueError:
-            print("Input is not a number, you must choose a number.")
-    print(val)
-    return val
-            
-# Parse the query text to determine the value
-def get_initial_type(line):
-    if "INT" in line.upper():
-        return TypesZ.INT
+    create_query_file(table_name, table_keys, sample_data)
     
 
-# Allow user to make field wildcard and set its values
-def let_field_be_wild(key, current_type):
-    new_type = current_type
-    values = []
-    initial_check = input("Would you like to make {} a wildcard? (y/N)  ".format(key))
-    if (len(initial_check) > 0 and initial_check[0].lower() == "y"):
-        #continue
-        random_check = input("Will this be an ordered or random wildcard? (o/R")
-        if (len(random_check) > 0 and random_check.lower() == "o"):
-            new_type = TypesZ.WILDCARD
-        else: 
-            new_type = TypesZ.WILDCARD_RANDOM
-        amount = num_input("How many wildcard values would you like to add?  ")
-        for i in range(amount):
-            value = input("Enter wildcard value {}:  ".format(i))
-            values.append(value)
-        return (new_type, values) # Wilcard type with special values     
+       
+''' 
+    SCHEMA FOR TABLES!!! 
+    Sample project is a sports event
+    Tables needed include - 
+'''
+# Lists used in schemas
+coach_ids = [1, 14, 22, 24, 25, 26, 30, 36, 41, 42, 44, 46, 51, 54, 57, 61, 63, 70, 77, 85, 92, 99, 102, 109, 111, 113, 144, 149, 152, 155, 160, 163, 168, 172, 181, 183, 186, 189, 193, 201, 202, 205, 206, 226, 238, 247, 258, 259, 261, 267, 269, 274, 275, 277, 281, 283, 290, 299, 310, 311, 312, 331, 347, 355, 358, 359, 360, 367, 378, 382, 383, 387, 394, 395, 405, 407, 411, 413, 415, 418, 424, 425, 429, 431, 436, 447, 449, 453, 459, 463, 468, 471, 478, 479, 484, 489, 501, 505, 506, 511, 514, 528, 534, 539, 553, 555, 559, 580, 582, 585, 586, 600, 601, 610, 612, 613, 617, 622, 623, 624, 634, 635, 637, 643, 645, 649, 658, 659, 665, 670, 674, 676, 682, 684, 692, 693, 699, 707, 710, 711, 718, 733, 736, 749, 751, 754, 760, 765, 769, 775, 789, 794, 797, 811, 812, 819, 823, 829, 837, 854, 855, 858, 859, 860, 862, 869, 875, 876, 877, 881, 885, 893, 900, 902, 906, 910, 921, 923, 926, 929, 935, 936, 947, 962, 975, 985, 988, 991]
+medical_ids = [2, 3, 6, 7, 27, 66, 67, 68, 72, 73, 84, 86, 88, 93, 95, 96, 104, 114, 121, 122, 126, 133, 143, 150, 157, 161, 170, 173, 174, 177, 187, 191, 200, 204, 209, 218, 219, 223, 228, 231, 237, 239, 242, 245, 250, 254, 255, 262, 268, 271, 272, 278, 280, 282, 296, 297, 303, 304, 313, 315, 316, 319, 323, 327, 339, 340, 349, 354, 357, 370, 372, 373, 376, 377, 396, 399, 416, 417, 419, 439, 444, 446, 448, 452, 455, 467, 476, 481, 483, 485, 494, 496, 504, 513, 520, 523, 530, 537, 538, 540, 543, 561, 568, 571, 574, 576, 583, 587, 593, 598, 606, 618, 620, 621, 625, 628, 632, 636, 639, 640, 648, 667, 668, 669, 671, 673, 678, 701, 703, 704, 705, 708, 719, 723, 726, 727, 728, 731, 738, 747, 752, 753, 755, 758, 763, 764, 768, 776, 778, 779, 781, 788, 791, 798, 800, 801, 802, 803, 805, 807, 815, 822, 824, 833, 841, 842, 845, 866, 872, 880, 899, 907, 908, 911, 912, 917, 924, 927, 932, 937, 938, 950, 953, 955, 960, 961, 970, 972, 977, 979, 984, 992, 993, 995, 996]
+swimmer_ids = [5, 13, 16, 18, 21, 35, 37, 39, 47, 49, 52, 75, 76, 89, 97, 108, 110, 118, 120, 123, 125, 127, 129, 139, 141, 142, 147, 153, 158, 159, 165, 166, 176, 178, 179, 180, 188, 207, 212, 216, 220, 225, 230, 233, 235, 241, 244, 246, 248, 252, 253, 270, 276, 288, 289, 295, 298, 301, 306, 308, 317, 318, 321, 334, 337, 343, 351, 353, 356, 362, 363, 364, 379, 380, 384, 388, 389, 392, 393, 397, 398, 401, 403, 414, 420, 421, 426, 428, 432, 462, 466, 472, 474, 486, 487, 488, 490, 491, 495, 497, 498, 500, 510, 515, 519, 524, 529, 531, 535, 541, 542, 550, 558, 566, 569, 570, 572, 584, 592, 599, 605, 616, 626, 627, 630, 644, 647, 651, 652, 656, 677, 679, 686, 691, 697, 698, 702, 709, 713, 714, 730, 732, 737, 739, 761, 762, 767, 771, 780, 782, 787, 796, 821, 825, 839, 844, 848, 849, 850, 857, 867, 868, 884, 888, 889, 890, 891, 898, 904, 913, 914, 915, 920, 925, 928, 931, 933, 939, 942, 946, 951, 956, 958, 963, 965, 969, 971, 973, 982, 986, 999]
+countries = ['Anguilla', 'Antigua and Barbuda', 'Australia', 'Bahamas', 'Bangladesh', 'Barbados', 'Belize', 'Bermuda', 'Botswana', ' Britain', 'British Virgin Islands', 'Brunei', 'Cameroon', 'Canada', 'Cayman Islands', 'Cook Islands', 'Cyprus', 'Dominica', 'Falkland Islands', 'Fiji', 'Ghana', 'Gibraltar', 'Grenada', 'Guernsey', 'Guyana', 'India', 'Isle of Man', 'Jamaica', 'Jersey', 'Kenya', 'Kiribati', 'Lesotho', 'Malawi', 'Malaysia', 'Malta', 'Mauritius', 'Montserrat', 'Mozambique', 'Namibia', 'Nauru', 'New Zealand', 'Nigeria', 'Niue', 'Norfolk Island', 'Northern Ireland', 'Pakistan', 'Papua New Guinea', 'Rwanda', 'Saint Helena', 'Saint Kitts and Nevis', 'Saint Lucia', 'Saint Vincent and the Grenadines', 'Samoa', 'Scotland', 'Seychelles', 'Sierra Leone', 'Singapore', 'Solomon Islands', 'South Africa', 'Sri Lanka', 'Swaziland', 'Tanzania', 'Tonga', 'Trinidad and Tobago', 'Turks and Caicos Islands', 'Tuvalu', 'Uganda', 'Vanuatu', 'Wales', 'Zambia']
+races = ['Heat 1','Heat 2','Heat 3','Heat 4','Semi-Final 1','Semi-Final 2']
+event_names = ["800m Freestyle - Men","800m Freestyle - Women","1500m Freestyle - Men","1500m Freestyle - Women","4 x 100m Freestyle Relay - Men", "4 x 100m Freestyle Relay - Women", "4 x 100m Medley Relay - Men","4 x 100m Medley Relay - Women", "4 x 200m Freestyle Relay - Men","4 x 200m Freestyle Relay - Women"]
+qualifying_times = ["8:01:22","8:31.25","15:12.97","16:10.88","3:16.37","3:40.00","3:34.47","4:00.57","7:10.36","7:52.45"]
+
+#COACH
+COACH = {
+    'TeamMemberID': Attribute(Types.WILDCARD, False, 0, coach_ids),
+    'CertificationLevel': Attribute(Types.WILDCARD_RANDOM, False, 0, [1,2,3,4,5]),
+    'CertificationDate': Attribute(Types.DATE, False, 0, []),
+    'WWCCheckDate': Attribute(Types.DATE, False, 0, []),
+    'IsHeadCoach': Attribute(Types.WILDCARD_RANDOM, False, 0, ["EMPTY_PLACEHOLDER_VALUE"]),
+}
+
+# COMMONWEALTH_GAME
+COMMONWEALTH_GAME = {
+    "Year": Attribute(Types.WILDCARD, False, None, [2022]),
+    "Country": Attribute(Types.WILDCARD, False, None, ["England"]),
+    "City": Attribute(Types.WILDCARD, False, None, ["Birmingham"])
+}
+
+# EVENT
+EVENT = {
+    'EventID': Attribute(Types.INT_INCREMENT, False, 8, []),
+    'Year': Attribute(Types.WILDCARD_RANDOM, False, 4, [2022]),
+    'Name': Attribute(Types.WILDCARD, False, 0, event_names),
+    'MinimumQualifyingTime': Attribute(Types.WILDCARD, False, 0, qualifying_times),
+}
+
+# EVENT_REGISTRATION
+EVENT_REGISTRATION = {
+    'Event': Attribute(Types.WILDCARD_RANDOM, False, 0, [1,2,3,4,5,6,7,8,9,10]),
+    'Swimmer': Attribute(Types.WILDCARD_RANDOM, False, 0, swimmer_ids),
+    'QualifyingTime': Attribute(Types.WILDCARD_RANDOM, False, 0, ['25.62','25.05','25.32','26.79','23.55']),
+    'QualifyingDate': Attribute(Types.DATE, False),
+    'QualifyingCompetition': Attribute(Types.WILDCARD_RANDOM, False, 0, ['Pan Pacific','European Junior Swimming Championships','World Aquatics Championships']),
+}
+
+# GAMES_REGISTRATION
+GAMES_REGISTRATION = {
+    'Country': Attribute(Types.WILDCARD, False, 0, countries),
+    'Year': Attribute(Types.WILDCARD_RANDOM, False, 0, [2022])
+}
+
+# MEDICAL
+MEDICAL = {
+    'TeamMemberID': Attribute(Types.WILDCARD, False, 0, medical_ids),
+    'Qualification': Attribute(Types.WILDCARD_RANDOM, False, 6, ['MD','MBBS','M.Med']),
+    'Specialisation': Attribute(Types.WILDCARD_RANDOM, True, 20, ['Orthopaedics','Surgery']),
+    'QualificationDate': Attribute(Types.DATE, False),
+    'IsChiefMedicalOfficer': Attribute(Types.DATE, False),
+}
+
+# POOL
+POOL = {
+    'PoolID': Attribute(Types.INT_INCREMENT, False, 8, []),
+    'Name': Attribute(Types.WILDCARD, False, 100, ["Competition Pool","Training Pool","Program Pool","Diving Pool"]),
+    'LaneCount': Attribute(Types.WILDCARD, False, 2, [10, 8, 7, "EMPTY_PLACEHOLDER_VALUE"]),
+    'Length': Attribute(Types.WILDCARD, False, 5, [50, 50, 25, 33]),
+}
+
+# RACE
+
+''' Generate time in an ultra-custom way '''
+def create_time(index):
+    if 20 <= index < 40:
+        index -= 20
+    if 40 <= index < 60:
+        index -= 40
+    hours = 10
+    mins = "00"
+    remainder = index % 4
+    if remainder:
+        mins = "{}".format(remainder * 15)
     else:
-        return (current_type, []) # Non-wildcard
+        mins = "00"
+    if 4 <= index < 8:
+        hours += 1
+    elif 8 <= index < 12:
+        hours += 2
+    elif  12 <= index < 16:
+        hours += 3
+    elif  16 <= index < 20:
+        hours += 4
+    return "{}:{}:00".format(hours, mins)
+
+''' Generate day in an ultra-custom way '''
+def create_day(index):
+    if index < 20:
+        return 1
+    elif 20 <= index < 40:
+        return 2
+    elif 40 <= index < 60:
+        return 3
+
+RACE = {
+    'RaceID': Attribute(Types.INT_INCREMENT, False, 8, []),
+    'Event': Attribute(Types.WILDCARD_RANDOM, False, 8, [1,2,3,4,5,6,7,8,9,10]),
+    'Name': Attribute(Types.WILDCARD_RANDOM, False, 20, races),
+    'IsFinal': Attribute(Types.WILDCARD_RANDOM, False, 0, ["EMPTY_PLACEHOLDER_VALUE"]),
+    'Day': Attribute(Types.MAGIC, False, 0, Magic.GET_DAY),
+    'StartTime': Attribute(Types.MAGIC, False, 0, Magic.RACE_TIMES),
+    'Pool': Attribute(Types.WILDCARD_RANDOM, False, 8, [1]),
+}
+
+#RACE_RESULT
+RACE_RESULT = {
+    'Race': Attribute(Types.INT_FOREIGN_KEY, False, 60),
+    'Swimmer': Attribute(Types.WILDCARD_RANDOM, False, 0, swimmer_ids),
+    'Lane': Attribute(Types.INT_FOREIGN_KEY, False, 10),
+    'RecordedTime': Attribute(Types.DECIMAL, False, 2),
+    'Place': Attribute(Types.INT_FOREIGN_KEY, False, 10)
+}
+
+
+#SWIMMER
+SWIMMER = {
+    'TeamMemberID': Attribute(Types.WILDCARD, False, 0, swimmer_ids),
+    'DateOfBirth': Attribute(Types.DATE, False, 0, []),
+    'Coach': Attribute(Types.WILDCARD_RANDOM, False, 0, coach_ids),
+    'IsTeamLeader': Attribute(Types.WILDCARD_RANDOM, False, 0, ["EMPTY_PLACEHOLDER_VALUE"]),
+}
+
+#TEAM
+TEAM = {
+    'Country': Attribute(Types.WILDCARD, False, 0, countries),
+    'PostalAddress': Attribute(Types.ADDRESS, False, 0, []),
+    'PhoneContact': Attribute(Types.PHONE, False, 0, []),
+}
+
+#TEAM_MEMBER
+''' Special function to process team member data '''
+def process_team_members(data_list):
+    coaches_list = []
+    medical_list = []
+    swimmers_list = []
+    index = 0
+    for row in data_list:
+        if row['MembershipType'] == "Coach":
+            coaches_list.append(row['TeamMemberID'])
+        elif row['MembershipType'] == "Medical":
+            medical_list.append(row['TeamMemberID'])
+        elif row['MembershipType'] == "Swimmer":
+            swimmers_list.append(row['TeamMemberID'])
+        elif row['MembershipType'] == "TeamManager":
+            data_list[index]['IsTeamManager'] = True
+        index += 1
+    print("coach_ids = {}".format(str(coaches_list)))
+    print("medical_ids = {}".format(str(medical_list)))
+    print("swimmer_ids = {}".format(str(swimmers_list)))
+    return data_list
+
+TEAM_MEMBER = {
+    'TeamMemberID': Attribute(Types.INT_INCREMENT, False, 8, []),
+    'Country': Attribute(Types.WILDCARD_RANDOM, False, 20, countries),
+    'FirstName': Attribute(Types.FIRST_NAME, False, 20, []),
+    'LastName': Attribute(Types.LAST_NAME, False, 20, []),
+    'Phone': Attribute(Types.PHONE, False, 10, []),
+    'Address': Attribute(Types.ADDRESS, False, 40, []),
+    'City': Attribute(Types.CITY, False, 20, []),
+    'State': Attribute(Types.STATE, False, 0, []),
+    'Postcode': Attribute(Types.INT, False, 4, []),
+    'IsTeamManager': Attribute(Types.WILDCARD_RANDOM, False, 0, ["EMPTY_PLACEHOLDER_VALUE"]),
+    'MembershipType': Attribute(Types.WILDCARD_RANDOM, False, 1, ["Team Manager", "Swimmer", "General Staff", "Coach", "Medical"]),
+}
+
+STUDENT = {
+    'FirstName': Attribute(Types.FIRST_NAME, False, 0, []),
+    'LastName': Attribute(Types.LAST_NAME, False, 0, []),
+    'Address': Attribute(Types.ADDRESS, False, 0, []),
+    'City': Attribute(Types.CITY, False, 0, []),
+    'State': Attribute(Types.STATE, False, 0, []),
+    'Postcode': Attribute(Types.INT, False, 4, []),
+    'Phone': Attribute(Types.PHONE, False, 0, []),
+    'Email': Attribute(Types.EMAIL, False, 0, [])
+}
     
-def sql_into_schema(query_body):
-    schema = {} # Store the schema here
-    lines = query_body.split(",") # Create list of query lines
-    for line in lines: # Iterate through lines
-        key = "" # Store the attribute key
-        get_key = False # Handle whether to record key
-        for char in line: # Iterate through characters in the query to get key
-            if get_key:
-                key += char
-            if char == "`":
-                get_key = not get_key
-        null_status = True
-        if ("NOT NULL" in line.upper()):
-            null_status = False
-        if ("AUTO_INCREMENT" in line.upper()):
-            schema[key] = Attribute(TypesZ.INT_INCREMENT, null_status, 0, [])
-        else: 
-        # Get limits and wildcard values
-            
-            data_type, wildcard_values = let_field_be_wild(key, TypesZ.INT)
-            limit = 100
-            schema[key] = Attribute(data_type, null_status, limit, wildcard_values)
-    print(schema)
 
-            
-            
-            
-        
-    
-    
-# ass is a schema for the ass table
-ass = {
-       "Ass": Attribute(Types.INT_INCREMENT, True, 100, []),
-       "Butt": Attribute(Types.INT_INCREMENT, False, 100, [])
-}
 
-assessment = {
-    "AssessmentID": [Types.INT_INCREMENT, False],
-    "UnitOfferingID": [Types.FOREIGN_KEY, False, 25],
-    "AssementName": [Types.VARCHAR, False, 40],
-    "AssessmentDescription": [Types.TEXT, False, 100],
-    "DueDate": [Types.DATE, False],
-    "PossibleMarks": [Types.INT, False, 2]
-}
-#sample_generation("assessment", assessment, 30) 
+''' Function to run the program (2 Options for the action) '''
+def run(action, table_name, 
+        schema={"Year": Attribute(Types.WILDCARD, False, None, [2022])}, 
+        limit=1, apply_process=False, magic=Magic.DEFAULT):
+    if action == Actions.GET_ATTRIBUTES:
+        create_attributes(table_name)
+    elif action == Actions.GENERATE_SAMPLE_DATA:
+        generate_sample_data(table_name, schema, limit, apply_process, magic)
 
-campus = {
-    "CampusID": [Types.INT_INCREMENT, False],
-	"StreetAddress": [Types.ADDRESS, False],
-	"City": [Types.CITY, False],
-	"State": [Types.STATE, False],
-	"Postcode": [Types.POSTCODE, False, 4],
-	"PhoneHelpline": [Types.PHONE, False],
-}
-#sample_generation("campus", campus, 15) 
 
-course = {
-    "CourseCode": [Types.INT_INCREMENT, False],
-	"CourseName": [Types.WILDCARD, False, ["Maths", "Biology", "Geology", "Medicine", "Computer Science", "Information Technology", "Engineering", "Counselling", "Law", "Environmental Science"]],
-	"CreditPoints": [Types.CREDIT, False],
-	"Notes": [Types.TEXT, True, 100],
-}
-#sample_generation("course", course, len(course["CourseName"][2])) 
 
-course_enrolment = {
-    "StudentID": [Types.FOREIGN_KEY, False, 85],
-    "CourseCode": [Types.FOREIGN_KEY, False, 9],
-    "EnrolmentDate": [Types.DATE, False],
-    "CurrentStatus": [Types.WILDCARD_RANDOM, False, ["Complete", "Enrolled", "Deferred"]]
-}
-#sample_generation("course_enrolment", course_enrolment, 80) 
-
-room = {
-    "RoomID": [Types.INT_INCREMENT, False],
-    "Building": [Types.WILDCARD_RANDOM, False, ["A", "B", "C", "D"]],
-    "Floor": [Types.WILDCARD_RANDOM, False, [1, 2, 3, 4, 5]],
-    "RoomCode": [Types.ROOM_CODE, False],
-    "Function": [Types.FUNCTION, False],
-    "CampusID": [Types.FOREIGN_KEY, False, 14],
-}
-#sample_generation("room", room, 30) 
-
-student = {
-    "StudentID": [Types.INT_INCREMENT, False],
-	"FirstName": [Types.FIRST_NAME, False],
-	"LastName": [Types.LAST_NAME, False],
-	"StreetAddress": [Types.ADDRESS, False],
-	"City": [Types.CITY, False],
-	"State": [Types.STATE, False],
-	"Postcode": [Types.POSTCODE, False, 4],
-	"Email": [Types.EMAIL, False],
-}
-#sample_generation("student", student, 50) 
-
-student_assessment = {
-    "AssessmentID": [Types.FOREIGN_KEY, False, 29],
-    "StudentID": [Types.FOREIGN_KEY, False, 89],
-    "DateSubmitted": [Types.DATE, False],
-    "DaysExtension": [Types.INT, True, 1],
-    "MarksAwarded": [Types.DECIMAL, False, 2] 
-}
-sample_generation("student-assessment", student_assessment, 150) 
-
-teacher = {
-    "StaffID": [Types.INT_INCREMENT, False],
-	"FirstName": [Types.FIRST_NAME, False],
-	"LastName": [Types.LAST_NAME, False],
-	"Email": [Types.EMAIL, False],
-	"Phone": [Types.PHONE, True],
-	"OfficeID": [Types.FOREIGN_KEY, True, 29]
-}
-#sample_generation("teacher", teacher, 12) 
-
-unit = {
-	"UnitCode": [Types.UNIT_CODE, False],
-	"UnitName": [Types.VARCHAR, False, 20],
-	"Description": [Types.TEXT, False, 100],
-	"CourseCode": [Types.FOREIGN_KEY, False, 9],
-}
-#sample_generation("unit", unit, 11) 
-
-unit_offering = {
-    "UnitOfferingID": [Types.INT_INCREMENT, False],
-    "UnitCode": [Types.WILDCARD_RANDOM, False, ['ICC7121', 'WVD2142', 'MYF2875', 'YXW3245', 'RBT6140']],
-    "Year": [Types.WILDCARD_RANDOM, False, [2014, 2015, 2016, 2017]],
-    "Session": [Types.WILDCARD_RANDOM, False, [1, 2, 3]],
-    "AssessorID": [Types.FOREIGN_KEY, False, 11]
-}
-#sample_generation("unit-offering", unit_offering, 26) 
-
-unit_enrolment = {
-    "StudentID": [Types.FOREIGN_KEY, False, 89],
-    "UnitOfferingID": [Types.FOREIGN_KEY, False, 25],
-    "EnrolmentType": [Types.WILDCARD_RANDOM, False, ["External", "On-Campus"]],
-    "FinalGrade": [Types.WILDCARD_RANDOM, True, ["Fail", "Pass", "Credit", "Distinction", "High Distinction"]],
-}
-#sample_generation("unit-enrolment", unit_enrolment, 150) 
-
-workshop = {
-    "WorkshopID": [Types.INT_INCREMENT, False],
-    "UnitOfferingID": [Types.FOREIGN_KEY, False, 25],
-    "ClassroomID": [Types.FOREIGN_KEY, False, 29],
-    "TeacherID": [Types.FOREIGN_KEY, False, 11],
-    "DayOfWeek": [Types.WILDCARD_RANDOM, False, ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]],
-    "ClassTimes": [Types.WILDCARD_RANDOM, False, ["10AM-12PM", "2PM-4PM", "3PM-5PM"]],
-}
-#sample_generation("workshop", workshop, 15) 
-
-workshop_enrolment = {
-    "WorkshopID": [Types.FOREIGN_KEY, False, 15],
-    "StudentID": [Types.FOREIGN_KEY, False, 89],
-}
-#sample_generation("workshop-enrolment", workshop_enrolment, 50) 
-
-#swap_quotes()
+''' RUN the program here '''
+#run(Actions.GET_ATTRIBUTES, "RACE_RESULT")
+run(Actions.GENERATE_SAMPLE_DATA, "STUDENT", STUDENT, 50)
