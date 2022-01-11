@@ -394,6 +394,7 @@ TEAM_MEMBER = {
     'City': Attribute(Types.CITY, False, 20, []),
     'State': Attribute(Types.STATE, False, 0, []),
     'Postcode': Attribute(Types.INT, False, 4, []),
+    'Email': Attribute(Types.EMAIL, False, 0, []),
     'IsTeamManager': Attribute(Types.WILDCARD_RANDOM, False, 0, ["EMPTY_PLACEHOLDER_VALUE"]),
     'MembershipType': Attribute(Types.WILDCARD_RANDOM, False, 1, ["Team Manager", "Swimmer", "General Staff", "Coach", "Medical"]),
 }
@@ -406,6 +407,19 @@ STUDENT = {
     'State': Attribute(Types.STATE, False, 0, []),
     'Postcode': Attribute(Types.INT, False, 4, []),
     'Phone': Attribute(Types.PHONE, False, 0, []),
+    'Email': Attribute(Types.EMAIL, False, 0, [])
+}
+
+COUNTRY_TEAM = {
+    'GamesID': Attribute(Types.INT_INCREMENT, False, 8, []),
+    'Country': Attribute(Types.WILDCARD_RANDOM, False, 20, countries),
+    'LastName': Attribute(Types.LAST_NAME, False, 20, []),
+    'FirstName': Attribute(Types.FIRST_NAME, False, 20, []),
+    'ContactMobile': Attribute(Types.PHONE, False, 10, []),
+    'Address': Attribute(Types.ADDRESS, False, 40, []),
+    'City': Attribute(Types.CITY, False, 20, []),
+    'State': Attribute(Types.STATE, False, 0, []),
+    'Postcode': Attribute(Types.INT, False, 4, []),
     'Email': Attribute(Types.EMAIL, False, 0, [])
 }
     
@@ -424,5 +438,7 @@ def run(action, table_name,
 
 ''' RUN the program here '''
 #run(Actions.GET_ATTRIBUTES, "RACE_RESULT")
-run(Actions.GENERATE_SAMPLE_DATA, "TEAM_MEMBER", TEAM_MEMBER, 100, True, Magic.PROCESS_TEAM_MEMBERS)
+#run(Actions.GENERATE_SAMPLE_DATA, "TEAM_MEMBER", TEAM_MEMBER, 100, True, Magic.PROCESS_TEAM_MEMBERS)
 #run(Actions.GENERATE_SAMPLE_DATA, "SWIMMER", SWIMMER, 50)
+
+run(Actions.GENERATE_SAMPLE_DATA, "COUNTRY_TEAM", COUNTRY_TEAM, len(countries))
