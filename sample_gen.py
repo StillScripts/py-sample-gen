@@ -412,12 +412,12 @@ STUDENT = {
 
 COUNTRY_TEAM = {
     'GamesID': Attribute(Types.INT_INCREMENT, False, 8, []),
-    'Country': Attribute(Types.WILDCARD_RANDOM, False, 20, countries),
-    'LastName': Attribute(Types.LAST_NAME, False, 20, []),
-    'FirstName': Attribute(Types.FIRST_NAME, False, 20, []),
-    'ContactMobile': Attribute(Types.PHONE, False, 10, []),
-    'Address': Attribute(Types.ADDRESS, False, 40, []),
-    'City': Attribute(Types.CITY, False, 20, []),
+    'Country': Attribute(Types.WILDCARD_RANDOM, False, 0, countries),
+    'LastName': Attribute(Types.LAST_NAME, False, 0, []),
+    'FirstName': Attribute(Types.FIRST_NAME, False, 0, []),
+    'ContactMobile': Attribute(Types.PHONE, False, 0, []),
+    'Address': Attribute(Types.ADDRESS, False, 0, []),
+    'City': Attribute(Types.CITY, False, 0, []),
     'State': Attribute(Types.STATE, False, 0, []),
     'Postcode': Attribute(Types.INT, False, 4, []),
     'Email': Attribute(Types.EMAIL, False, 0, [])
