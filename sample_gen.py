@@ -7,9 +7,12 @@ Created on Sun Jan  9 07:56:38 2022
 
 ''' Imports '''
 from enum import Enum
+import math
 import random
 from faker import Faker
 from datetime import datetime
+from datetime import date
+my_date = date(2021, 3, 2)
 fake = Faker()
 
 ''' CLASSES AND FUNCTIONS '''
@@ -22,9 +25,14 @@ class Actions(Enum):
 ''' Blueprint for running all the possible special functions '''
 class Magic(Enum):
     DEFAULT = 0
-    RACE_TIMES = 1 # Used for generating race times
+    GET_HEAT = 1 # Used for generating the race heat 
     GET_DAY = 2 # Used for generating race day
-    PROCESS_TEAM_MEMBERS = 3 # Used for saving the ids of specific members
+    GET_RACE_TIME = 3 # Used for generating race times
+    GET_EVENT_ID = 4 # Used for generating eventID for race
+    GET_TEAM= 5 # Used for getting the team
+    GET_TEAM_ROLE = 6 # Used for team membership roles
+    PROCESS_TEAM_MEMBERS = 7 # Used for saving the ids of specific members
+    PREVENT_DUPLICATES = 8 # Used for preventing duplicate composite keys
 
 
 ''' Blueprint for the possible data types to use '''
@@ -109,12 +117,22 @@ def dec_gen(limit, digits):
 
 ''' Handle magic functions  '''
 def handle_magic(index=0, magic=Magic.DEFAULT, data_list=[]):
-    if magic == Magic.RACE_TIMES:
-        return create_time(index)
+    if magic == Magic.GET_HEAT:
+        return create_heat(index)
     elif magic == Magic.GET_DAY:
         return create_day(index)
+    elif magic == Magic.GET_RACE_TIME:
+        return create_time(index)
+    elif magic == Magic.GET_EVENT_ID:
+        return select_event(index)
+    elif magic == Magic.GET_TEAM:
+        return create_membership(index, False)
+    elif magic == Magic.GET_TEAM_ROLE:
+        return create_membership(index, True)
     elif magic == Magic.PROCESS_TEAM_MEMBERS:
         return process_team_members(data_list)
+    elif magic == Magic.PREVENT_DUPLICATES:
+        return prevent_duplicates(index)
     else:
         return data_list
 
@@ -128,7 +146,7 @@ def generate_value_for_column(column, index):
         if dt == Types.INT_INCREMENT:
             value = index + 1 # increment by 1
         elif dt == Types.INT_FOREIGN_KEY:
-            value = random.randint(1, column.limit)
+            value = random.randint(1, column.limit) # use foreign key randomly
         elif dt == Types.INT:
             value = int_gen(column.limit) # random int
         elif dt == Types.DECIMAL:
@@ -156,7 +174,7 @@ def generate_value_for_column(column, index):
         elif dt == Types.DATE:
             value = fake.date_between_dates(
                 date_start=datetime(2021,1,1), 
-                date_end=datetime(2021,12,31)) # date within range
+                date_end=datetime(2021,12,31)).strftime('%Y-%m-%d') # date within range
         elif dt == Types.SINGLE:
             value = column.wildcard_values[0] # use the single wildcard value
         elif dt == Types.WILDCARD:
@@ -167,7 +185,7 @@ def generate_value_for_column(column, index):
         elif dt == Types.CODE_ID:
             value = "{}-{}".format(column.wildcard_values[0], index+1)
         elif dt == Types.MAGIC:
-            value = handle_magic(index, column.wildcard_values)   
+            value = handle_magic(index, column.wildcard_values) # fun the magic function 
     return value
 
 
@@ -181,7 +199,7 @@ def create_query_file(table_name, table_keys, sample_data):
     statement = statement.replace("[", "").replace("]", "")
     # Convert the EMPTY_PLACEHOLDER_VALUE to NULL for SQL
     statement = statement.replace("'EMPTY_PLACEHOLDER_VALUE'", "NULL")
-    with open('{}.txt'.format(table_name), 'w') as f:
+    with open('{}.sql'.format(table_name), 'w') as f:
         f.write(statement)
 
 
@@ -228,12 +246,12 @@ def generate_sample_data(table_name, schema, limit, apply_process=False, magic=M
     Tables needed include - 
 '''
 # Lists used in schemas
-#coach_ids = [1, 14, 22, 24, 25, 26, 30, 36, 41, 42, 44, 46, 51, 54, 57, 61, 63, 70, 77, 85, 92, 99, 102, 109, 111, 113, 144, 149, 152, 155, 160, 163, 168, 172, 181, 183, 186, 189, 193, 201, 202, 205, 206, 226, 238, 247, 258, 259, 261, 267, 269, 274, 275, 277, 281, 283, 290, 299, 310, 311, 312, 331, 347, 355, 358, 359, 360, 367, 378, 382, 383, 387, 394, 395, 405, 407, 411, 413, 415, 418, 424, 425, 429, 431, 436, 447, 449, 453, 459, 463, 468, 471, 478, 479, 484, 489, 501, 505, 506, 511, 514, 528, 534, 539, 553, 555, 559, 580, 582, 585, 586, 600, 601, 610, 612, 613, 617, 622, 623, 624, 634, 635, 637, 643, 645, 649, 658, 659, 665, 670, 674, 676, 682, 684, 692, 693, 699, 707, 710, 711, 718, 733, 736, 749, 751, 754, 760, 765, 769, 775, 789, 794, 797, 811, 812, 819, 823, 829, 837, 854, 855, 858, 859, 860, 862, 869, 875, 876, 877, 881, 885, 893, 900, 902, 906, 910, 921, 923, 926, 929, 935, 936, 947, 962, 975, 985, 988, 991]
-coach_ids = [1, 8, 23, 27, 30, 35, 37, 39, 40, 42, 48, 55, 61, 66, 71, 88, 97]
-medical_ids = [7, 14, 19, 20, 26, 32, 34, 43, 46, 49, 52, 54, 67, 69, 73, 79, 84, 85, 87, 98, 99]
-swimmer_ids = [2, 6, 9, 13, 18, 31, 33, 36, 56, 57, 68, 78, 82, 83, 89, 91]
+
+coach_ids = [71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 286, 287, 288, 292, 298, 300, 301, 303, 307, 309, 310, 313, 315, 316, 318, 324, 332, 338, 340, 341, 347, 349, 357, 358, 359, 367, 368, 370, 378, 379, 384, 386, 387, 392, 393, 396, 400]
+medical_ids = [211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258, 259, 260, 261, 262, 263, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275, 276, 277, 278, 279, 280, 283, 290, 291, 293, 294, 295, 297, 299, 308, 311, 312, 322, 323, 326, 328, 329, 342, 344, 346, 351, 353, 354, 355, 356, 360, 366, 369, 372, 373, 377, 381, 385, 394, 397]
+swimmer_ids = [141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 282, 284, 285, 296, 302, 304, 305, 306, 314, 321, 327, 333, 335, 339, 343, 361, 362, 371, 375, 380, 383, 389, 390, 399]
 countries = ['Anguilla', 'Antigua and Barbuda', 'Australia', 'Bahamas', 'Bangladesh', 'Barbados', 'Belize', 'Bermuda', 'Botswana', ' Britain', 'British Virgin Islands', 'Brunei', 'Cameroon', 'Canada', 'Cayman Islands', 'Cook Islands', 'Cyprus', 'Dominica', 'Falkland Islands', 'Fiji', 'Ghana', 'Gibraltar', 'Grenada', 'Guernsey', 'Guyana', 'India', 'Isle of Man', 'Jamaica', 'Jersey', 'Kenya', 'Kiribati', 'Lesotho', 'Malawi', 'Malaysia', 'Malta', 'Mauritius', 'Montserrat', 'Mozambique', 'Namibia', 'Nauru', 'New Zealand', 'Nigeria', 'Niue', 'Norfolk Island', 'Northern Ireland', 'Pakistan', 'Papua New Guinea', 'Rwanda', 'Saint Helena', 'Saint Kitts and Nevis', 'Saint Lucia', 'Saint Vincent and the Grenadines', 'Samoa', 'Scotland', 'Seychelles', 'Sierra Leone', 'Singapore', 'Solomon Islands', 'South Africa', 'Sri Lanka', 'Swaziland', 'Tanzania', 'Tonga', 'Trinidad and Tobago', 'Turks and Caicos Islands', 'Tuvalu', 'Uganda', 'Vanuatu', 'Wales', 'Zambia']
-races = ['Heat 1','Heat 2','Heat 3','Heat 4','Semi-Final 1','Semi-Final 2']
+approved = ['Pan Pacific','European Junior Swimming Championships','World Aquatics Championships']
 event_names = ["800m Freestyle - Men","800m Freestyle - Women","1500m Freestyle - Men","1500m Freestyle - Women","4 x 100m Freestyle Relay - Men", "4 x 100m Freestyle Relay - Women", "4 x 100m Medley Relay - Men","4 x 100m Medley Relay - Women", "4 x 200m Freestyle Relay - Men","4 x 200m Freestyle Relay - Women"]
 qualifying_times = ["8:01:22","8:31.25","15:12.97","16:10.88","3:16.37","3:40.00","3:34.47","4:00.57","7:10.36","7:52.45"]
 
@@ -242,8 +260,7 @@ COACH = {
     'TeamMemberID': Attribute(Types.WILDCARD, False, 0, coach_ids),
     'CertificationLevel': Attribute(Types.WILDCARD_RANDOM, False, 0, [1,2,3,4,5]),
     'CertificationDate': Attribute(Types.DATE, False, 0, []),
-    'WWCCheckDate': Attribute(Types.DATE, False, 0, []),
-    'IsHeadCoach': Attribute(Types.WILDCARD_RANDOM, False, 0, ["EMPTY_PLACEHOLDER_VALUE"]),
+    'WWCCheckDate': Attribute(Types.DATE, False, 0, [])
 }
 
 # COMMONWEALTH_GAME
@@ -256,24 +273,25 @@ COMMONWEALTH_GAME = {
 # EVENT
 EVENT = {
     'EventID': Attribute(Types.INT_INCREMENT, False, 8, []),
-    'Year': Attribute(Types.WILDCARD_RANDOM, False, 4, [2022]),
+    'Year': Attribute(Types.SINGLE, False, 0, [2022]),
     'Name': Attribute(Types.WILDCARD, False, 0, event_names),
     'MinimumQualifyingTime': Attribute(Types.WILDCARD, False, 0, qualifying_times),
+    'IsRelay': Attribute(Types.SINGLE, False, 0, [False])
 }
 
 # EVENT_REGISTRATION
 EVENT_REGISTRATION = {
-    'Event': Attribute(Types.WILDCARD_RANDOM, False, 0, [1,2,3,4,5,6,7,8,9,10]),
+    'Event': Attribute(Types.INT_FOREIGN_KEY, False, 10, []),
     'Swimmer': Attribute(Types.WILDCARD_RANDOM, False, 0, swimmer_ids),
+    'QualifyingCompetition': Attribute(Types.INT_FOREIGN_KEY, False, 3, []),
     'QualifyingTime': Attribute(Types.WILDCARD_RANDOM, False, 0, ['25.62','25.05','25.32','26.79','23.55']),
     'QualifyingDate': Attribute(Types.DATE, False),
-    'QualifyingCompetition': Attribute(Types.WILDCARD_RANDOM, False, 0, ['Pan Pacific','European Junior Swimming Championships','World Aquatics Championships']),
 }
 
 # GAMES_REGISTRATION
 GAMES_REGISTRATION = {
-    'Country': Attribute(Types.WILDCARD, False, 0, countries),
-    'Year': Attribute(Types.WILDCARD_RANDOM, False, 0, [2022])
+    'Team': Attribute(Types.WILDCARD, False, 0, list(range(1,len(countries)+1))),
+    'Year': Attribute(Types.SINGLE, False, 0, [2022])
 }
 
 # MEDICAL
@@ -282,7 +300,12 @@ MEDICAL = {
     'Qualification': Attribute(Types.WILDCARD_RANDOM, False, 6, ['MD','MBBS','M.Med']),
     'Specialisation': Attribute(Types.WILDCARD_RANDOM, True, 20, ['Orthopaedics','Surgery']),
     'QualificationDate': Attribute(Types.DATE, False),
-    'IsChiefMedicalOfficer': Attribute(Types.DATE, False),
+}
+
+# NATIONAL_TEAM
+NATIONAL_TEAM = {
+    'NationalTeamID': Attribute(Types.INT_INCREMENT, False, 8, []),
+    'Country': Attribute(Types.WILDCARD, False, 0, countries),
 }
 
 # POOL
@@ -293,66 +316,103 @@ POOL = {
     'Length': Attribute(Types.WILDCARD, False, 5, [50, 50, 25, 33]),
 }
 
+#QUALIFYING_COMPETITION
+QUALIFYING_COMPETITION = {
+    'CompetitionID': Attribute(Types.INT_INCREMENT, False, 8, []),
+    'Year': Attribute(Types.SINGLE, False, 0, [2021]),
+    'Name': Attribute(Types.WILDCARD, False, 0, approved),
+}
+
+
 # RACE
+''' Count a number down to a specific range '''
+def count_down(number, decrement):
+    if number > decrement:
+        number -= decrement
+        return count_down(number, decrement)
+    else: 
+        return number
+
+''' Generate the id for the event '''
+def select_event(index):
+    # for heats, go up 1 every 4
+    if index < 40:
+        return math.ceil((index+1)/4)
+    # for semi finals, go 1 very 2, 
+    elif 40 <= index <= 60:
+        new_index = count_down(index+1,20)
+        return math.ceil(new_index/2)
+    # for finals go up 1 every time
+    else:
+        return count_down(index+1,10)
+
+''' Generate the heat in an ultra-custom way '''
+def create_heat(index):
+    if index < 40:
+        return "Heat {}".format(count_down((index+1), 4))
+    elif 40 <= index < 60:
+        return "Semi Final {}".format(count_down((index+1), 2))
+    else: 
+        return "Final"
+    
 
 ''' Generate time in an ultra-custom way '''
 def create_time(index):
-    if 20 <= index < 40:
-        index -= 20
-    if 40 <= index < 60:
-        index -= 40
-    hours = 10
+    index = count_down(index, 20)
+    hours = 10 + math.floor(index/4)
     mins = "00"
     remainder = index % 4
     if remainder:
         mins = "{}".format(remainder * 15)
     else:
         mins = "00"
-    if 4 <= index < 8:
-        hours += 1
-    elif 8 <= index < 12:
-        hours += 2
-    elif  12 <= index < 16:
-        hours += 3
-    elif  16 <= index < 20:
-        hours += 4
     return "{}:{}:00".format(hours, mins)
 
 ''' Generate day in an ultra-custom way '''
 def create_day(index):
-    if index < 20:
-        return 1
-    elif 20 <= index < 40:
-        return 2
-    elif 40 <= index < 60:
-        return 3
+    return math.ceil((index+1)/20)
+
 
 RACE = {
     'RaceID': Attribute(Types.INT_INCREMENT, False, 8, []),
-    'Event': Attribute(Types.WILDCARD_RANDOM, False, 8, [1,2,3,4,5,6,7,8,9,10]),
-    'Name': Attribute(Types.WILDCARD_RANDOM, False, 20, races),
-    'IsFinal': Attribute(Types.WILDCARD_RANDOM, False, 0, ["EMPTY_PLACEHOLDER_VALUE"]),
+    'Event': Attribute(Types.MAGIC, False, 0, Magic.GET_EVENT_ID),
+    'Heat': Attribute(Types.MAGIC, False, 0, Magic.GET_HEAT),
     'Day': Attribute(Types.MAGIC, False, 0, Magic.GET_DAY),
-    'StartTime': Attribute(Types.MAGIC, False, 0, Magic.RACE_TIMES),
-    'Pool': Attribute(Types.WILDCARD_RANDOM, False, 8, [1]),
+    'StartTime': Attribute(Types.MAGIC, False, 0, Magic.GET_RACE_TIME),
+    'Pool': Attribute(Types.SINGLE, False, 0, [1]),
 }
 
 #RACE_RESULT
 RACE_RESULT = {
-    'Race': Attribute(Types.INT_FOREIGN_KEY, False, 60),
-    'Swimmer': Attribute(Types.WILDCARD_RANDOM, False, 0, swimmer_ids),
+    'RaceResultID': Attribute(Types.INT_INCREMENT, False, 8, []),
+    'Race': Attribute(Types.INT_FOREIGN_KEY, False, 70),
     'Lane': Attribute(Types.INT_FOREIGN_KEY, False, 10),
-    'RecordedTime': Attribute(Types.DECIMAL, False, 2),
-    'Place': Attribute(Types.INT_FOREIGN_KEY, False, 10)
+    'RecordedTime': Attribute(Types.WILDCARD_RANDOM, False, 0, ['25.62','25.05','25.32','26.79','2:23.55', '46.88', '1:33.12', '28.32']),
+    'Place': Attribute(Types.INT_FOREIGN_KEY, False, 10),
+    'Medal': Attribute(Types.SINGLE, False, 0, ["EMPTY_PLACEHOLDER_VALUE"])
 }
 
 
 #SWIMMER
 SWIMMER = {
     'TeamMemberID': Attribute(Types.WILDCARD, False, 0, swimmer_ids),
+    'Gender': Attribute(Types.WILDCARD_RANDOM, False, 0, ["Male", "Female"]),
     'DateOfBirth': Attribute(Types.DATE, False, 0, []),
     'Coach': Attribute(Types.WILDCARD_RANDOM, False, 0, coach_ids),
-    'IsTeamLeader': Attribute(Types.WILDCARD_RANDOM, False, 0, ["EMPTY_PLACEHOLDER_VALUE"]),
+    'IsTeamLeader': Attribute(Types.SINGLE, False, 0, [False]),
+}
+
+#SWIMMER_RESULT
+def prevent_duplicates(index):
+    if index < 500:
+        return index + 1
+    else:
+        return random.randint(1, 500)
+
+SWIMMER_RESULT = {
+    'Swimmer': Attribute(Types.WILDCARD_RANDOM, False, 8, swimmer_ids),
+    'RaceResult': Attribute(Types.MAGIC, False, 8, Magic.PREVENT_DUPLICATES),
+    'SwimmerTime': Attribute(Types.WILDCARD_RANDOM, False, 10, ['25.62','25.05','25.32','26.79','2:23.55', '46.88', '1:33.12', '28.32']),
 }
 
 #TEAM
@@ -384,19 +444,48 @@ def process_team_members(data_list):
     print("swimmer_ids = {}".format(str(swimmers_list)))
     return data_list
 
+''' Generate team or role in a custom way '''
+def create_membership(index, role):
+    if index < 70:
+        if role:
+            return "Team Manager"
+        else: 
+            return index + 1
+    elif 70 <= index < 140:
+        if role:
+            return "Coach"
+        else:
+            return count_down((index+1), 70)
+    elif 140 <= index < 210:
+        if role:
+            return "Swimmer"
+        else:
+            return count_down((index+1), 70)
+    elif 210 <= index < 280:
+        if role:
+            return "Medical"
+        else:
+            return count_down((index+1), 70)
+    elif index >= 280:
+        if role:
+            roles = ["Swimmer", "General", "Coach", "Medical"]
+            return roles[random.randint(0, 3)]
+        else:
+            return random.randint(1, 70)
+
+
 TEAM_MEMBER = {
     'TeamMemberID': Attribute(Types.INT_INCREMENT, False, 8, []),
-    'Country': Attribute(Types.WILDCARD_RANDOM, False, 20, countries),
-    'FirstName': Attribute(Types.FIRST_NAME, False, 20, []),
-    'LastName': Attribute(Types.LAST_NAME, False, 20, []),
-    'Phone': Attribute(Types.PHONE, False, 10, []),
-    'Address': Attribute(Types.ADDRESS, False, 40, []),
-    'City': Attribute(Types.CITY, False, 20, []),
+    'Team': Attribute(Types.MAGIC, False, 0, Magic.GET_TEAM),
+    'FirstName': Attribute(Types.FIRST_NAME, False, 0, []),
+    'LastName': Attribute(Types.LAST_NAME, False, 0, []),
+    'Phone': Attribute(Types.PHONE, False, 0, []),
+    'Email': Attribute(Types.EMAIL, True, 0, []),
+    'Address': Attribute(Types.ADDRESS, False, 0, []),
+    'City': Attribute(Types.CITY, False, 0, []),
     'State': Attribute(Types.STATE, False, 0, []),
-    'Postcode': Attribute(Types.INT, False, 4, []),
-    'Email': Attribute(Types.EMAIL, False, 0, []),
-    'IsTeamManager': Attribute(Types.WILDCARD_RANDOM, False, 0, ["EMPTY_PLACEHOLDER_VALUE"]),
-    'MembershipType': Attribute(Types.WILDCARD_RANDOM, False, 1, ["Team Manager", "Swimmer", "General Staff", "Coach", "Medical"]),
+    'Postcode': Attribute(Types.INT, False, 5, []),
+    'MembershipType': Attribute(Types.MAGIC, False, 0, Magic.GET_TEAM_ROLE),
 }
 
 STUDENT = {
@@ -437,8 +526,7 @@ def run(action, table_name,
 
 
 ''' RUN the program here '''
-#run(Actions.GET_ATTRIBUTES, "RACE_RESULT")
-#run(Actions.GENERATE_SAMPLE_DATA, "TEAM_MEMBER", TEAM_MEMBER, 100, True, Magic.PROCESS_TEAM_MEMBERS)
-#run(Actions.GENERATE_SAMPLE_DATA, "SWIMMER", SWIMMER, 50)
+#run(Actions.GET_ATTRIBUTES, "SWIMMER_RESULT")
+#run(Actions.GENERATE_SAMPLE_DATA, "TEAM_MEMBER", TEAM_MEMBER, 400, True, Magic.PROCESS_TEAM_MEMBERS)
 
-run(Actions.GENERATE_SAMPLE_DATA, "COUNTRY_TEAM", COUNTRY_TEAM, 200))
+run(Actions.GENERATE_SAMPLE_DATA, "SWIMMER_RESULT", SWIMMER_RESULT, 700)
