@@ -1,16 +1,14 @@
+# -*- coding: utf-8 -*-
 """
 Created on Sat Apr 30 10:12:04 2022
 
 @author: daniel
 """
 
-from generator.classes import Actions, Types, Magic
-from generator.main import generate_sample_data
-from attribute_maker.classes import Attribute
-from attribute_maker.main import create_attributes
-from example import main
+from generator.generator import Actions, Magic, Types, generate_sample_data
+from attribute_maker.attribute_maker import Attribute, create_attributes
+from example.attributes import * # All attributes
 
-''' Function to run the program (2 Options for the action) '''
 def run(action, 
         table_name, 
         schema={"Year": Attribute(Types.WILDCARD, False, None, [2022])}, 
@@ -22,5 +20,5 @@ def run(action,
     elif action == Actions.GENERATE_SAMPLE_DATA:
         generate_sample_data(table_name, schema, limit, apply_process, magic)
 
-# Example query
-run(Actions.GENERATE_SAMPLE_DATA, "TEAM_MEMBER", main.TEAM_MEMBER, 100, True, Magic.PROCESS_TEAM_MEMBERS)
+# Example statement
+run(Actions.GENERATE_SAMPLE_DATA, "TEAM_MEMBER", TEAM_MEMBER, 100, True, Magic.PROCESS_TEAM_MEMBERS)
